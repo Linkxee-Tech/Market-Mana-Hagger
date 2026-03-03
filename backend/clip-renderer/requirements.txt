@@ -1,0 +1,8 @@
+
+fastapi
+uvicorn[standard]
+pydantic
+pydantic-settings
+google-cloud-storage
+google-cloud-tasks
+python-dotenv

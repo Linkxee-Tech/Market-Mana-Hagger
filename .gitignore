@@ -1,0 +1,40 @@
+# Next.js
+.next/
+out/
+build/
+node_modules/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.venv/
+env/
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Firebase
+.firebase/
+firebase-debug.log*
+firestore-debug.log*
+pubsub-debug.log*
+ui-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+.git/
+
+# GCP
+.gcloud/
+current_errors.json
+error_logs.json
+raw_logs.json
+full_logs.txt
+post_logs.json
+debug_logs.json
+temp_read_logs.py

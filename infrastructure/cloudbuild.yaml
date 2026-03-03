@@ -1,0 +1,64 @@
+steps:
+  # 1. Install dependencies and run tests (optional but recommended)
+  - name: 'python:3.11-slim'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        cd backend
+        pip install -r requirements.txt
+        # pytest # Uncomment if you have tests ready
+
+steps:
+  # 1. Orchestrator
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['build', '-t', 'gcr.io/$PROJECT_ID/mama-orchestrator', '-f', 'backend/orchestrator/Dockerfile', '.']
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', 'gcr.io/$PROJECT_ID/mama-orchestrator']
+  
+  # 2. Vision Analyzer
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['build', '-t', 'gcr.io/$PROJECT_ID/mama-vision', '-f', 'backend/vision-analyzer/Dockerfile', '.']
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', 'gcr.io/$PROJECT_ID/mama-vision']
+
+  # 3. Price Intelligence
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['build', '-t', 'gcr.io/$PROJECT_ID/mama-price', '-f', 'backend/price-intelligence/Dockerfile', '.']
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', 'gcr.io/$PROJECT_ID/mama-price']
+
+  # 4. UI Action Engine
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['build', '-t', 'gcr.io/$PROJECT_ID/mama-ui', '-f', 'backend/ui-action-engine/Dockerfile', '.']
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', 'gcr.io/$PROJECT_ID/mama-ui']
+
+  # 5. Clip Renderer
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['build', '-t', 'gcr.io/$PROJECT_ID/mama-clip', '-f', 'backend/clip-renderer/Dockerfile', '.']
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', 'gcr.io/$PROJECT_ID/mama-clip']
+
+  # Deploy Orchestrator (Primary)
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: 'gcloud'
+    args:
+      - 'run'
+      - 'deploy'
+      - 'mama-orchestrator'
+      - '--image'
+      - 'gcr.io/$PROJECT_ID/mama-orchestrator'
+      - '--region'
+      - 'us-central1'
+      - '--platform'
+      - 'managed'
+      - '--allow-unauthenticated'
+
+images:
+  - 'gcr.io/$PROJECT_ID/mama-orchestrator'
+  - 'gcr.io/$PROJECT_ID/mama-vision'
+  - 'gcr.io/$PROJECT_ID/mama-price'
+  - 'gcr.io/$PROJECT_ID/mama-ui'
+  - 'gcr.io/$PROJECT_ID/mama-clip'
+

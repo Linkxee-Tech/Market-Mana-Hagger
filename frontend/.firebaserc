@@ -1,0 +1,15 @@
+{
+  "projects": {
+    "default": "market-mama-haggler"
+  },
+  "targets": {
+    "market-mama-haggler": {
+      "hosting": {
+        "default": [
+          "market-mama-haggler"
+        ]
+      }
+    }
+  },
+  "etags": {}
+}
