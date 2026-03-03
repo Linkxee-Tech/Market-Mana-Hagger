@@ -17,6 +17,9 @@ COPY backend /app/backend
 # Set working directory to the service directory
 WORKDIR /app/backend/orchestrator
 
+# Ensure shared and other services are in the python path
+ENV PYTHONPATH=/app/backend
+
 # Cloud Run defaults: Port 8080
 ENV PORT=8080
 EXPOSE 8080
