@@ -4,11 +4,15 @@ import { useSearchParams } from "next/navigation";
 import { useEffect, Suspense } from "react";
 import HagglePage from "../haggle/page";
 import { useSession } from "../../hooks/useSession";
+import { RealtimeProvider } from "../../context/RealtimeContext";
+import { useSettingsStore } from "../../store/useSettingsStore";
 
 function SessionContent() {
     const searchParams = useSearchParams();
     const sessionId = searchParams.get("id");
     const { session, loadSessionById } = useSession();
+
+    const { selectedPersona } = useSettingsStore();
 
     useEffect(() => {
         if (sessionId && (!session || session.id !== sessionId)) {
@@ -16,7 +20,11 @@ function SessionContent() {
         }
     }, [sessionId, session, loadSessionById]);
 
-    return <HagglePage />;
+    return (
+        <RealtimeProvider sessionId={sessionId || undefined} persona={selectedPersona}>
+            <HagglePage />
+        </RealtimeProvider>
+    );
 }
 
 export default function SessionPage() {

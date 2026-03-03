@@ -40,6 +40,7 @@ async def _run_vision_scan(
     vision_service: VisionService,
     price_engine: NegotiationEngine,
     ui_engine: UiEngine,
+    live_session: Any = None,
 ) -> None:
     try:
         image_bytes, mime_type = decode_data_url(screenshot)
@@ -70,6 +71,13 @@ async def _run_vision_scan(
                 },
             }
         )
+
+        # Inform Mama (the live session) about the vision results so she can talk about them
+        if live_session and vision.products:
+            product_names = [p.name for p in vision.products]
+            summary = f"I see: {', '.join(product_names)}. {analysis.suggestion}"
+            # Send as text input to the live session to trigger a response
+            await live_session.send(input=summary, end_of_turn=True)
     except Exception as exc:
         await websocket.send_json({"type": "ERROR", "payload": {"message": f"Vision error: {str(exc)} "}})
 
@@ -128,6 +136,11 @@ async def unified_ws(
                                     "type": "MAMA_AUDIO",
                                     "payload": {"audio": b64_audio}
                                 })
+                            if part.text:
+                                await websocket.send_json({
+                                    "type": "MAMA_SPEAK",
+                                    "payload": {"speech": part.text}
+                                })
             except Exception as e:
                 print(f"Gemini receive error: {e}")
 
@@ -154,6 +167,14 @@ async def unified_ws(
                         await live_session.send(input=audio_bytes, end_of_turn=False)
                     continue
 
+                if msg_type == "USER_SPEECH":
+                    text = payload.get("payload", {}).get("text")
+                    if text and live_session:
+                        # Forward text to Gemini Live
+                        # For Multimodal Live, we send a part with text
+                        await live_session.send(input=text, end_of_turn=True)
+                    continue
+
                 if (msg_type == "USER_STOP") or (msg_type == "INTERRUPT"):
                     # Signal end of turn or explicit interruption
                     if live_session:
@@ -172,6 +193,7 @@ async def unified_ws(
                             vision_service=vision_service,
                             price_engine=price_engine,
                             ui_engine=ui_engine,
+                            live_session=live_session,
                         )
                     )
                     continue

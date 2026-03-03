@@ -1,42 +1,47 @@
 
 import { useEffect, useRef, useState } from "react";
-import { useRealtimeSession } from "../hooks/useRealtimeSession";
+import { useRealtime } from "../context/RealtimeContext";
 
-interface AudioStreamerProps {
-  sessionId: string;
-  enabled: boolean;
-}
 
-export function AudioStreamer({ sessionId, enabled }: AudioStreamerProps) {
-  const { send, lastMessage } = useRealtimeSession(sessionId);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+
+export function AudioStreamer({ enabled }: { enabled: boolean }) {
+  const { send, lastMessage } = useRealtime();
   const [error, setError] = useState<string>();
 
-  // Audio Playback State
   const audioContextRef = useRef<AudioContext | null>(null);
   const nextStartTimeRef = useRef<number>(0);
+  const workletNodeRef = useRef<AudioWorkletNode | null>(null);
+  const sourceNodeRef = useRef<MediaStreamAudioSourceNode | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
 
   const playAudioChunk = async (base64Audio: string) => {
     try {
       if (!audioContextRef.current) {
-        const AudioContextClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-        audioContextRef.current = new AudioContextClass();
+        audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
         nextStartTimeRef.current = audioContextRef.current.currentTime;
       }
-
       const ctx = audioContextRef.current;
+      if (ctx.state === "suspended") await ctx.resume();
+
       const binaryString = window.atob(base64Audio);
-      const bytes = new Uint8Array(binaryString.length);
-      for (let i = 0; i < binaryString.length; i++) {
-        bytes[i] = binaryString.charCodeAt(i);
+      const len = binaryString.length;
+      const bytes = new Uint8Array(len);
+      for (let i = 0; i < len; i++) bytes[i] = binaryString.charCodeAt(i);
+
+      // Gemini returns PCM16 Little Endian. Convert to Float32 for Web Audio
+      const pcm16 = new Int16Array(bytes.buffer);
+      const float32 = new Float32Array(pcm16.length);
+      for (let i = 0; i < pcm16.length; i++) {
+        float32[i] = pcm16[i] / 32768.0;
       }
 
-      const audioBuffer = await ctx.decodeAudioData(bytes.buffer);
+      const audioBuffer = ctx.createBuffer(1, float32.length, ctx.sampleRate);
+      audioBuffer.copyToChannel(float32, 0);
+
       const source = ctx.createBufferSource();
       source.buffer = audioBuffer;
       source.connect(ctx.destination);
 
-      // Schedule playback to ensure gapless streaming
       const startTime = Math.max(nextStartTimeRef.current, ctx.currentTime);
       source.start(startTime);
       nextStartTimeRef.current = startTime + audioBuffer.duration;
@@ -45,55 +50,76 @@ export function AudioStreamer({ sessionId, enabled }: AudioStreamerProps) {
     }
   };
 
-  // Handle incoming audio chunks from Mama
   useEffect(() => {
     if (lastMessage?.type === "MAMA_AUDIO" && lastMessage.payload?.audio) {
       playAudioChunk(lastMessage.payload.audio as string);
     }
   }, [lastMessage]);
 
-  // Recording Logic
   useEffect(() => {
-    if (!enabled) {
-      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
-        mediaRecorderRef.current.stop();
+    const cleanupRecording = () => {
+      if (workletNodeRef.current) {
+        workletNodeRef.current.port.onmessage = null;
+        workletNodeRef.current.disconnect();
+        workletNodeRef.current = null;
+      }
+      if (sourceNodeRef.current) {
+        sourceNodeRef.current.disconnect();
+        sourceNodeRef.current = null;
+      }
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(t => t.stop());
+        streamRef.current = null;
+      }
+      if (!enabled) {
         send("USER_STOP", {});
       }
+    };
+
+    if (!enabled) {
+      cleanupRecording();
       return;
     }
 
-    let stream: MediaStream | null = null;
-
     const startRecording = async () => {
       try {
-        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        if (!audioContextRef.current) {
+          audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
+        }
+        const ctx = audioContextRef.current;
+        if (ctx.state === "suspended") await ctx.resume();
 
-        // INTERRUPT LOGIC: If we start recording while Mama is speaking, signal interrupt
-        send("INTERRUPT", {});
-
-        // Stop any current playback
-        if (audioContextRef.current && audioContextRef.current.state === "running") {
-          // Re-creating or resetting nextStartTime to "now" stops the scheduling buffer
-          nextStartTimeRef.current = audioContextRef.current.currentTime;
+        try {
+          await ctx.audioWorklet.addModule("/audio-processor.js");
+        } catch (e) {
+          console.warn("Worklet module error:", e);
         }
 
-        const recorder = new MediaRecorder(stream, { mimeType: "audio/webm" });
-        mediaRecorderRef.current = recorder;
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        streamRef.current = stream;
 
-        recorder.ondataavailable = async (event) => {
-          if (event.data.size > 0) {
-            const reader = new FileReader();
-            reader.onloadend = () => {
-              const base64 = (reader.result as string).split(",")[1];
-              send("USER_AUDIO", { audio: base64 });
-            };
-            reader.readAsDataURL(event.data);
+        send("INTERRUPT", {});
+        if (ctx.state === "running") {
+          nextStartTimeRef.current = ctx.currentTime;
+        }
+
+        const source = ctx.createMediaStreamSource(stream);
+        sourceNodeRef.current = source;
+        const workletNode = new AudioWorkletNode(ctx, "audio-processor");
+        workletNodeRef.current = workletNode;
+
+        workletNode.port.onmessage = (event) => {
+          const buffer = event.data;
+          const bytes = new Uint8Array(buffer);
+          let binary = "";
+          for (let i = 0; i < bytes.byteLength; i++) {
+            binary += String.fromCharCode(bytes[i]);
           }
+          const base64 = btoa(binary);
+          send("USER_AUDIO", { audio: base64 });
         };
 
-        // Send small chunks for real-time responsiveness
-        recorder.start(100);
-
+        source.connect(workletNode);
       } catch (err) {
         console.error("Failed to start audio", err);
         setError("Microphone access denied");
@@ -101,22 +127,15 @@ export function AudioStreamer({ sessionId, enabled }: AudioStreamerProps) {
     };
 
     startRecording();
-
-    return () => {
-      if (mediaRecorderRef.current) {
-        if (mediaRecorderRef.current.state !== "inactive") {
-          mediaRecorderRef.current.stop();
-        }
-        mediaRecorderRef.current = null;
-      }
-      if (stream) {
-        stream.getTracks().forEach(t => t.stop());
-      }
-    };
+    return cleanupRecording;
   }, [enabled, send]);
 
   if (error) {
-    return <div className="p-4 text-red-500 bg-red-100 rounded-lg">{error}</div>;
+    return (
+      <div className="fixed bottom-24 right-4 p-4 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-xs font-bold uppercase tracking-wider backdrop-blur-md z-50">
+        MIC_ERROR: {error}
+      </div>
+    );
   }
 
   return null;

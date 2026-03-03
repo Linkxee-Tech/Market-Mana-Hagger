@@ -89,7 +89,7 @@ export function TopNav({ theme, toggleTheme, showThemeToggle }: TopNavProps) {
         <div className="flex items-center gap-2 md:gap-4">
           {userId ? (
             <div className="flex items-center gap-2 md:gap-3 pl-2 md:pl-4 border-l border-white/10">
-              <div className="flex flex-col items-end hidden sm:flex">
+              <div className="flex flex-col items-end">
                 <span className="text-[10px] font-black text-white/30 uppercase tracking-tighter leading-none mb-1">
                   {isAnonymous ? "Guest Mode" : "Authenticated"}
                 </span>
@@ -108,7 +108,7 @@ export function TopNav({ theme, toggleTheme, showThemeToggle }: TopNavProps) {
                 )}
                 <Link
                   href="/settings"
-                  className={`hidden md:block p-2 rounded-xl transition-all ${pathname === '/settings' ? 'bg-brand-emerald/10 text-brand-emerald' : 'bg-white/5 text-white/40 hover:text-white/70 hover:bg-white/10'}`}
+                  className={`p-2 rounded-xl transition-all ${pathname === '/settings' ? 'bg-brand-emerald/10 text-brand-emerald' : 'bg-white/5 text-white/40 hover:text-white/70 hover:bg-white/10'}`}
                   title="Settings"
                 >
                   <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
@@ -118,7 +118,7 @@ export function TopNav({ theme, toggleTheme, showThemeToggle }: TopNavProps) {
                 </Link>
                 <button
                   onClick={handleLogout}
-                  className="hidden md:block p-2 rounded-xl bg-white/5 hover:bg-red-500/10 hover:text-red-400 text-white/40 transition-all"
+                  className="p-2 rounded-xl bg-white/5 hover:bg-red-500/10 hover:text-red-400 text-white/40 transition-all"
                   title="Logout"
                 >
                   <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">

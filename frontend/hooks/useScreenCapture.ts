@@ -7,7 +7,7 @@ interface ScreenCaptureState {
   error?: string;
   startShare: () => Promise<void>;
   stopShare: () => void;
-  takeSnapshot: () => Promise<string | undefined>;
+  takeSnapshot: (silent?: boolean) => Promise<string | undefined>;
   uploadFile: (file: File) => Promise<string>;
 }
 
@@ -58,7 +58,7 @@ export function useScreenCapture(): ScreenCaptureState {
     }
   }, []);
 
-  const takeSnapshot = useCallback(async () => {
+  const takeSnapshot = useCallback(async (silent?: boolean) => {
     const currentStream = stream;
     if (!currentStream) {
       return undefined;
@@ -87,7 +87,10 @@ export function useScreenCapture(): ScreenCaptureState {
       }
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
       const dataUrl = canvas.toDataURL("image/png");
-      setScreenshotDataUrl(dataUrl);
+
+      if (!silent) {
+        setScreenshotDataUrl(dataUrl);
+      }
       return dataUrl;
     } catch {
       return undefined;

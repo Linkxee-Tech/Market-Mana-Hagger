@@ -19,7 +19,8 @@ import { OnboardingTour } from "../../components/OnboardingTour";
 
 import { useRouter } from "next/navigation";
 import { useSession } from "../../hooks/useSession";
-import { useRealtimeSession } from "../../hooks/useRealtimeSession";
+import { useRealtime } from "../../context/RealtimeContext";
+import { RealtimeProvider } from "../../context/RealtimeContext";
 import { useScreenCapture } from "../../hooks/useScreenCapture";
 import { useLeaderboard } from "../../hooks/useLeaderboard";
 import { UiAction } from "../../types/api";
@@ -36,16 +37,27 @@ interface SpeechPayload { speech: string; }
 interface ActionsPayload { actions: UiAction[]; }
 interface ClipPayload { status: string; progress?: number; url?: string; }
 
-
 export default function HagglePage() {
-    const router = useRouter();
-    const { userId, isAnonymous, _hasHydrated } = useUserStore();
+    const { selectedPersona } = useSettingsStore();
+    const { session, loading: sessionLoading, beginSession, stopSession, refreshSession } = useSession();
 
-    useEffect(() => {
-        if (_hasHydrated && (!userId || isAnonymous)) {
-            router.push('/login');
-        }
-    }, [userId, isAnonymous, _hasHydrated, router]);
+    // We wrap the inner content to provide the context
+    return (
+        <RealtimeProvider sessionId={session?.id} persona={selectedPersona}>
+            <HagglePageContent
+                session={session}
+                sessionLoading={sessionLoading}
+                beginSession={beginSession}
+                stopSession={stopSession}
+                refreshSession={refreshSession}
+            />
+        </RealtimeProvider>
+    );
+}
+
+function HagglePageContent({ session, sessionLoading, beginSession, stopSession, refreshSession }: any) {
+    const { userId, isAnonymous, _hasHydrated } = useUserStore();
+    const router = useRouter();
 
     const { selectedPersona, setSelectedPersona, autoAnalyze, setAutoAnalyze, autoHaggle, setAutoHaggle, hasSeenTour, setHasSeenTour } = useSettingsStore();
     const { micActive, setMicActive } = useUserStore();
@@ -57,8 +69,7 @@ export default function HagglePage() {
         transcriptEntries, addTranscriptEntry, setTranscriptEntries
     } = useMamaStore();
 
-    const { session, loading: sessionLoading, beginSession, stopSession, refreshSession } = useSession();
-    const { connected: realtimeConnected, lastMessage, send } = useRealtimeSession(session?.id, selectedPersona);
+    const { connected: realtimeConnected, lastMessage, send } = useRealtime();
     const { stream: screenStream, previewRef, startShare, stopShare, takeSnapshot, uploadFile, error: screenError, screenshotDataUrl } = useScreenCapture();
     const { entries: leaderboardEntries, loading: leaderboardLoading } = useLeaderboard();
 
@@ -170,7 +181,7 @@ export default function HagglePage() {
             interval = setInterval(async () => {
                 if (analyzing) return;
                 setAnalyzing(true);
-                const shot = await takeSnapshot();
+                const shot = await takeSnapshot(true);
                 if (shot) {
                     send("VISION_SCAN", { screenshot: shot });
                 }
@@ -237,8 +248,22 @@ export default function HagglePage() {
 
     if (!_hasHydrated || (!userId || isAnonymous)) {
         return (
-            <div className="min-h-screen bg-ui-bg flex items-center justify-center">
-                <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-brand-emerald"></div>
+            <div className="min-h-screen bg-ui-bg flex flex-col gap-6 pb-12 pt-28 animate-pulse">
+                <div className="px-4 max-w-7xl mx-auto w-full grid grid-cols-1 lg:grid-cols-12 gap-8">
+                    <div className="lg:col-span-8 flex flex-col gap-6">
+                        <section className="premium-card h-96 bg-white/5" />
+                        <div className="premium-card h-20 bg-white/5" />
+                        <div className="grid grid-cols-2 gap-6">
+                            <div className="premium-card h-32 bg-white/5" />
+                            <div className="premium-card h-32 bg-white/5" />
+                        </div>
+                    </div>
+                    <aside className="lg:col-span-4 flex flex-col gap-6">
+                        <div className="premium-card h-40 bg-white/5" />
+                        <div className="premium-card h-64 bg-white/5" />
+                        <div className="premium-card h-48 bg-white/5" />
+                    </aside>
+                </div>
             </div>
         );
     }
@@ -455,7 +480,7 @@ export default function HagglePage() {
 
             <Footer />
             <ConfettiBurst active={confetti} />
-            {session?.id && <AudioStreamer sessionId={session.id} enabled={micActive} />}
+            {session?.id && <AudioStreamer enabled={micActive} />}
             <OnboardingTour
                 steps={TOUR_STEPS}
                 isOpen={!hasSeenTour && !!userId}

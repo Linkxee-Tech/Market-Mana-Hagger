@@ -23,11 +23,22 @@ export function LeaderboardPanel({ loading, entries }: LeaderboardPanelProps) {
         </thead>
         <tbody className="divide-y divide-white/5">
           {loading ? (
-            <tr>
-              <td colSpan={3} className="py-8 text-center text-[10px] font-mono text-white/20 animate-pulse">
-                RETRIEVING_DATA_STREAM...
-              </td>
-            </tr>
+            [...Array(5)].map((_, i) => (
+              <tr key={`skeleton-${i}`} className="animate-pulse">
+                <td className="py-3 pr-4">
+                  <div className="flex items-center gap-2">
+                    <div className="w-1.5 h-1.5 rounded-full bg-white/10" />
+                    <div className="h-2 w-16 bg-white/10 rounded" />
+                  </div>
+                </td>
+                <td className="py-3 px-4">
+                  <div className="h-2 w-12 bg-white/5 rounded" />
+                </td>
+                <td className="py-3 pl-4 text-right">
+                  <div className="h-2 w-10 bg-brand-emerald/10 rounded ml-auto" />
+                </td>
+              </tr>
+            ))
           ) : entries.length === 0 ? (
             <tr>
               <td colSpan={3} className="py-8 text-center text-[10px] font-mono text-white/20">

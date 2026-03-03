@@ -8,12 +8,15 @@ import { useUserStore } from '../store/useUserStore';
 import { MamaAvatar } from './MamaAvatar';
 import { LeaderboardPanel } from './LeaderboardPanel';
 import { useLeaderboard } from '../hooks/useLeaderboard';
+import { useSession } from '../hooks/useSession';
 
 export default function LandingPage() {
     const router = useRouter();
     const { userId, isAnonymous } = useUserStore();
     const { entries: topSavers, loading: leaderboardLoading } = useLeaderboard();
+    const { beginSession } = useSession();
     const [initializing, setInitializing] = useState(true);
+    const [isStarting, setIsStarting] = useState(false);
 
     useEffect(() => {
         const init = async () => {
@@ -35,8 +38,20 @@ export default function LandingPage() {
             return;
         }
 
-        // Authenticated user → go directly to the haggle page
-        router.push('/haggle');
+        setIsStarting(true);
+        try {
+            const result = await beginSession();
+            if (result?.session?.id) {
+                router.push(`/session?id=${result.session.id}`);
+            } else {
+                router.push('/haggle');
+            }
+        } catch (err) {
+            console.error("Failed to start session from landing:", err);
+            router.push('/haggle');
+        } finally {
+            setIsStarting(false);
+        }
     };
 
     return (
@@ -63,13 +78,16 @@ export default function LandingPage() {
 
                     <button
                         onClick={handleStart}
-                        className="group relative px-10 py-5 bg-brand-emerald text-white rounded-2xl font-black uppercase tracking-widest text-lg transition-all duration-300 transform hover:scale-105 hover:shadow-[0_0_40px_rgba(16,185,129,0.4)] active:scale-95"
+                        disabled={isStarting}
+                        className={`group relative px-10 py-5 bg-brand-emerald text-white rounded-2xl font-black uppercase tracking-widest text-lg transition-all duration-300 transform hover:scale-105 hover:shadow-[0_0_40px_rgba(16,185,129,0.4)] active:scale-95 ${isStarting ? 'opacity-50 cursor-wait' : ''}`}
                     >
                         <span className="relative z-10 flex items-center gap-2">
-                            Get Started
-                            <svg className="w-5 h-5 transition-transform group-hover:translate-x-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M14 5l7 7m0 0l-7 7m7-7H3" />
-                            </svg>
+                            {isStarting ? 'Connecting...' : 'Get Started'}
+                            {!isStarting && (
+                                <svg className="w-5 h-5 transition-transform group-hover:translate-x-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                                </svg>
+                            )}
                         </span>
                     </button>
 
