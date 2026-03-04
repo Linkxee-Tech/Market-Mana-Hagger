@@ -18,7 +18,7 @@ export default function LoginPage() {
         setError('');
         try {
             await loginEmail(email, password);
-            router.push('/haggle');
+            router.push('/dashboard');
         } catch (err: any) {
             setError(err.message || 'Login failed');
         } finally {

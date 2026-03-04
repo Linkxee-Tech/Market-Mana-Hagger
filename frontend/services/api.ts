@@ -8,7 +8,17 @@ import {
   UploadScreenshotResponse
 } from "../types/api";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080";
+const getApiBase = () => {
+  const explicit = process.env.NEXT_PUBLIC_API_BASE_URL;
+  if (explicit) return explicit;
+
+  if (typeof window !== "undefined" && (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1")) {
+    return "http://localhost:8080";
+  }
+  return "http://localhost:8080";
+};
+
+const API_BASE = getApiBase();
 
 import { useUserStore } from "../store/useUserStore";
 

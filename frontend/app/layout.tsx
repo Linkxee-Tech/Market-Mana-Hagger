@@ -6,6 +6,7 @@ export const metadata: Metadata = {
   description: "Realtime, intelligent bargaining coach and savings tracker for your shopping flow. Powered by Gemini Flash 2.0.",
 };
 import { AuthProvider } from "../components/AuthProvider";
+import { GlobalProvider } from "../components/GlobalProvider";
 
 export default function RootLayout({
   children,
@@ -15,9 +16,11 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className="antialiased font-sans">
-        <AuthProvider>
-          {children}
-        </AuthProvider>
+        <GlobalProvider>
+          <AuthProvider>
+            {children}
+          </AuthProvider>
+        </GlobalProvider>
       </body>
     </html>
   );

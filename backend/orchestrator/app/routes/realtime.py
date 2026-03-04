@@ -1,3 +1,4 @@
+import logging
 import json
 import asyncio
 import base64
@@ -6,10 +7,11 @@ from typing import Any, Optional
 from contextlib import asynccontextmanager
 
 from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
-from starlette.websockets import WebSocket, WebSocketDisconnect
 from starlette.websockets import WebSocketState
 
 from shared.models.schemas import UnifiedWsIncoming, LiveMessageRequest
+
+logger = logging.getLogger("market_mama.realtime")
 
 from orchestrator.app.services.realtime_hub import RealtimeHub
 from orchestrator.app.services.repository import SessionRepository
@@ -43,8 +45,11 @@ async def _run_vision_scan(
     live_session: Any = None,
 ) -> None:
     try:
+        logger.info(f"Starting VISION_SCAN for session: {session_id}")
         image_bytes, mime_type = decode_data_url(screenshot)
         vision = await vision_service.analyze(image_bytes=image_bytes, mime_type=mime_type)
+        logger.info(f"Vision analysis found {len(vision.products)} products.")
+        
         analysis = await price_engine.analyze(vision.products)
         actions = ui_engine.suggest_actions(vision.products, analysis)
         repository.update_session_savings(session_id, analysis.savings)
@@ -76,9 +81,14 @@ async def _run_vision_scan(
         if live_session and vision.products:
             product_names = [p.name for p in vision.products]
             summary = f"I see: {', '.join(product_names)}. {analysis.suggestion}"
-            # Send as text input to the live session to trigger a response
-            await live_session.send(input=summary, end_of_turn=True)
+            logger.info(f"Signaling Gemini Live with vision summary: {summary}")
+            # Explicitly send as dictionary part structure
+            await live_session.send(input={"text": summary}, end_of_turn=True)
+        elif not live_session:
+            logger.warning("No live_session available to relay vision summary.")
+            
     except Exception as exc:
+        logger.error(f"Vision error in session {session_id}: {exc}")
         await websocket.send_json({"type": "ERROR", "payload": {"message": f"Vision error: {str(exc)} "}})
 
 
@@ -94,12 +104,15 @@ async def unified_ws(
     price_engine: NegotiationEngine = Depends(get_price_engine),
     ui_engine: UiEngine = Depends(get_ui_engine),
 ) -> None:
+    await websocket.accept()
+    logger.info(f"Accepted WebSocket connection for session: {session_id}")
+
     session_model = repository.get_session(session_id)
     if not session_model:
+        logger.warning(f"Session not found: {session_id}")
+        await websocket.send_json({"type": "ERROR", "payload": {"message": "Session not found"}})
         await websocket.close(code=4404)
         return
-
-    await websocket.accept()
     
     @asynccontextmanager
     async def null_context():
@@ -111,6 +124,11 @@ async def unified_ws(
         gemini_live_cm = null_context()
 
     async with gemini_live_cm as live_session:
+        if live_session:
+            logger.info("Gemini Live session connected successfully.")
+        else:
+            logger.warning("Gemini Live session failed to connect (using null_context).")
+
         await websocket.send_json(
             {
                 "type": "CONNECTED",
@@ -126,10 +144,13 @@ async def unified_ws(
         async def receive_from_gemini():
             """Relays audio from Gemini back to the user."""
             try:
+                logger.info("Starting Gemini receive loop...")
                 async for audio_chunk in live_session.receive():
+                    logger.debug("Received chunk from Gemini.")
                     if audio_chunk.server_content and audio_chunk.server_content.model_turn:
                         for part in audio_chunk.server_content.model_turn.parts:
                             if part.inline_data:
+                                logger.info("Gemini sent AUDIO.")
                                 # Send binary audio chunk or base64
                                 b64_audio = base64.b64encode(part.inline_data.data).decode("utf-8")
                                 await websocket.send_json({
@@ -137,12 +158,13 @@ async def unified_ws(
                                     "payload": {"audio": b64_audio}
                                 })
                             if part.text:
+                                logger.info(f"Gemini sent TEXT: {part.text}")
                                 await websocket.send_json({
                                     "type": "MAMA_SPEAK",
                                     "payload": {"speech": part.text}
                                 })
             except Exception as e:
-                print(f"Gemini receive error: {e}")
+                logger.error(f"Gemini receive error: {e}")
 
         # Run Gemini relay in background
         gemini_task = None
@@ -154,6 +176,7 @@ async def unified_ws(
                 raw_message = await websocket.receive_text()
                 payload = json.loads(raw_message)
                 msg_type = str(payload.get("type") or "").upper()
+                logger.debug(f"Received message from client: {msg_type}")
 
                 if msg_type == "PING":
                     await websocket.send_json({"type": "PONG", "payload": {"sessionId": session_id}})
@@ -163,6 +186,7 @@ async def unified_ws(
                     # Forward binary audio to Gemini
                     audio_b64 = payload.get("payload", {}).get("audio")
                     if audio_b64 and live_session:
+                        logger.debug("Forwarding USER_AUDIO to Gemini.")
                         audio_bytes = base64.b64decode(audio_b64)
                         await live_session.send(input=audio_bytes, end_of_turn=False)
                     continue
@@ -170,12 +194,9 @@ async def unified_ws(
                 if msg_type == "USER_SPEECH":
                     text = payload.get("payload", {}).get("text")
                     if text and live_session:
-                        # Forward text to Gemini Live using correct Part structure
-                        # Multimodal Live API expects input as text string or raw bytes,
-                        # but if that fails, we can construct the explicit structure.
-                        # Actually, `live_session.send(input=text)` IS supported by the google-genai SDK 
-                        # if the model supports text input on the live connection. Let's ensure it's sent properly.
-                        await live_session.send(input=text, end_of_turn=True)
+                        logger.info(f"Forwarding USER_SPEECH to Gemini: {text}")
+                        # Wrap in explicit part structure for Multimodal Live API to trigger reply
+                        await live_session.send(input={"text": text}, end_of_turn=True)
                     continue
 
                 if (msg_type == "USER_STOP") or (msg_type == "INTERRUPT"):

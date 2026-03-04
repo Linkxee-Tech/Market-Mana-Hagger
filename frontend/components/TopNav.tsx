@@ -15,7 +15,7 @@ interface TopNavProps {
 }
 
 const NAV_ITEMS = [
-  { name: "Home", path: "/" },
+  { name: "Dashboard", path: "/dashboard" },
   { name: "Haggle", path: "/haggle" },
   { name: "Leaderboard", path: "/leaderboard" },
   { name: "History", path: "/history" },
@@ -90,9 +90,6 @@ export function TopNav({ theme, toggleTheme, showThemeToggle }: TopNavProps) {
           {userId ? (
             <div className="flex items-center gap-2 md:gap-3 pl-2 md:pl-4 border-l border-white/10">
               <div className="flex flex-col items-end">
-                <span className="text-[10px] font-black text-white/30 uppercase tracking-tighter leading-none mb-1">
-                  {isAnonymous ? "Guest Mode" : "Authenticated"}
-                </span>
                 <span className="text-xs font-mono text-brand-emerald">
                   {isAnonymous ? `Trader_${userId.slice(0, 4)}` : userId.slice(0, 8)}
                 </span>

@@ -11,6 +11,12 @@ interface RealtimeContextValue {
 const RealtimeContext = createContext<RealtimeContextValue | undefined>(undefined);
 
 function resolveWsBaseUrl(): string {
+    // Smart Resolution: Favor localhost during development
+    if (typeof window !== "undefined" && (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1")) {
+        const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+        return `${protocol}//localhost:8080`;
+    }
+
     const explicit = process.env.NEXT_PUBLIC_WS_BASE_URL as string | undefined;
     if (explicit && explicit.trim()) return explicit.trim();
 
@@ -22,7 +28,8 @@ function resolveWsBaseUrl(): string {
             return parsed.origin;
         } catch { }
     }
-    return "ws://127.0.0.1:8080";
+
+    return "ws://localhost:8080";
 }
 
 export function RealtimeProvider({ children, sessionId, persona = "ibadan" }: { children: React.ReactNode; sessionId?: string; persona?: string }) {
@@ -43,18 +50,20 @@ export function RealtimeProvider({ children, sessionId, persona = "ibadan" }: { 
         }
 
         const wsBase = resolveWsBaseUrl();
+        console.log(`[Realtime] Initializing connection to base: ${wsBase} for session: ${sessionId}`);
         manualCloseRef.current = false;
         let cancelled = false;
 
         const connect = () => {
             if (cancelled) return;
 
-            console.log(`[Realtime] Connecting to ${wsBase}/ws/${sessionId}?persona=${persona}`);
-            const ws = new WebSocket(`${wsBase}/ws/${sessionId}?persona=${persona}`);
+            const fullUrl = `${wsBase}/ws/${sessionId}?persona=${persona}`;
+            console.log(`[Realtime] Opening WebSocket: ${fullUrl}`);
+            const ws = new WebSocket(fullUrl);
             wsRef.current = ws;
 
             ws.onopen = () => {
-                console.log("[Realtime] Connected");
+                console.log("[Realtime] WebSocket connected and open.");
                 setConnected(true);
                 reconnectAttemptRef.current = 0;
                 setReconnectAttempt(0);

@@ -38,20 +38,16 @@ interface ActionsPayload { actions: UiAction[]; }
 interface ClipPayload { status: string; progress?: number; url?: string; }
 
 export default function HagglePage() {
-    const { selectedPersona } = useSettingsStore();
     const { session, loading: sessionLoading, beginSession, stopSession, refreshSession } = useSession();
 
-    // We wrap the inner content to provide the context
     return (
-        <RealtimeProvider sessionId={session?.id} persona={selectedPersona}>
-            <HagglePageContent
-                session={session}
-                sessionLoading={sessionLoading}
-                beginSession={beginSession}
-                stopSession={stopSession}
-                refreshSession={refreshSession}
-            />
-        </RealtimeProvider>
+        <HagglePageContent
+            session={session}
+            sessionLoading={sessionLoading}
+            beginSession={beginSession}
+            stopSession={stopSession}
+            refreshSession={refreshSession}
+        />
     );
 }
 
@@ -480,7 +476,6 @@ function HagglePageContent({ session, sessionLoading, beginSession, stopSession,
 
             <Footer />
             <ConfettiBurst active={confetti} />
-            {session?.id && <AudioStreamer enabled={micActive} />}
             <OnboardingTour
                 steps={TOUR_STEPS}
                 isOpen={!hasSeenTour && !!userId}
