@@ -59,15 +59,26 @@ export function RealtimeProvider({ children, sessionId, persona = "ibadan" }: { 
 
             let token = "";
             try {
+                // Wait for up to 2 seconds for currentUser to be available if it's currently null
+                if (firebaseAuth && !firebaseAuth.currentUser) {
+                    await new Promise((resolve) => {
+                        const unsubscribe = firebaseAuth.onAuthStateChanged((user) => {
+                            unsubscribe();
+                            resolve(user);
+                        });
+                        setTimeout(resolve, 2000); // Timeout after 2s
+                    });
+                }
+
                 if (firebaseAuth && firebaseAuth.currentUser) {
-                    token = await firebaseAuth.currentUser.getIdToken();
+                    token = await firebaseAuth.currentUser.getIdToken(true); // Force refresh to be sure
                 }
             } catch (e) {
                 console.warn("[Realtime] Failed to get auth token", e);
             }
 
             const fullUrl = `${wsBase}/ws/${sessionId}?persona=${persona}${token ? `&token=${token}` : ""}`;
-            console.log(`[Realtime] Opening WebSocket: ${wsBase}/ws/${sessionId}...`);
+            console.log(`[Realtime] Opening WebSocket: ${wsBase}/ws/${sessionId}${token ? " (with token)" : " (NO TOKEN)"}`);
 
             const ws = new WebSocket(fullUrl);
             wsRef.current = ws;

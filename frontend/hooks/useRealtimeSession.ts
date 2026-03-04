@@ -51,8 +51,19 @@ export function useRealtimeSession(sessionId?: string, persona: string = "ibadan
 
       let token = "";
       try {
-        if (firebaseAuth?.currentUser) {
-          token = await firebaseAuth.currentUser.getIdToken();
+        // Wait for up to 2 seconds for currentUser to be available if it's currently null
+        if (firebaseAuth && !firebaseAuth.currentUser) {
+          await new Promise((resolve) => {
+            const unsubscribe = firebaseAuth.onAuthStateChanged((user) => {
+              unsubscribe();
+              resolve(user);
+            });
+            setTimeout(resolve, 2000); // Timeout after 2s
+          });
+        }
+
+        if (firebaseAuth && firebaseAuth.currentUser) {
+          token = await firebaseAuth.currentUser.getIdToken(true); // Force refresh
         }
       } catch (e) {
         console.warn("[useRealtimeSession] Failed to get auth token", e);
