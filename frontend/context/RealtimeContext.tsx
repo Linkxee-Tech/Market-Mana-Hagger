@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { UnifiedWsIncoming } from "../types/api";
+import { firebaseAuth } from "../services/firebase";
 
 interface RealtimeContextValue {
     connected: boolean;
@@ -50,20 +51,29 @@ export function RealtimeProvider({ children, sessionId, persona = "ibadan" }: { 
         }
 
         const wsBase = resolveWsBaseUrl();
-        console.log(`[Realtime] Initializing connection to base: ${wsBase} for session: ${sessionId}`);
         manualCloseRef.current = false;
         let cancelled = false;
 
-        const connect = () => {
+        const connect = async () => {
             if (cancelled) return;
 
-            const fullUrl = `${wsBase}/ws/${sessionId}?persona=${persona}`;
-            console.log(`[Realtime] Opening WebSocket: ${fullUrl}`);
+            let token = "";
+            try {
+                if (firebaseAuth && firebaseAuth.currentUser) {
+                    token = await firebaseAuth.currentUser.getIdToken();
+                }
+            } catch (e) {
+                console.warn("[Realtime] Failed to get auth token", e);
+            }
+
+            const fullUrl = `${wsBase}/ws/${sessionId}?persona=${persona}${token ? `&token=${token}` : ""}`;
+            console.log(`[Realtime] Opening WebSocket: ${wsBase}/ws/${sessionId}...`);
+
             const ws = new WebSocket(fullUrl);
             wsRef.current = ws;
 
             ws.onopen = () => {
-                console.log("[Realtime] WebSocket connected and open.");
+                console.log("[Realtime] WebSocket connected.");
                 setConnected(true);
                 reconnectAttemptRef.current = 0;
                 setReconnectAttempt(0);
@@ -87,12 +97,14 @@ export function RealtimeProvider({ children, sessionId, persona = "ibadan" }: { 
             };
 
             ws.onerror = (e) => {
-                console.error("[Realtime] Error", e);
+                console.error("[Realtime] WebSocket error occurring.");
                 setConnected(false);
             };
 
             ws.onclose = (e) => {
-                console.log("[Realtime] Closed", e.code, e.reason);
+                if (e.code !== 1000) {
+                    console.log("[Realtime] Closed with code:", e.code, e.reason || "(no reason)");
+                }
                 setConnected(false);
                 if (heartbeatRef.current) {
                     window.clearInterval(heartbeatRef.current);
@@ -103,7 +115,7 @@ export function RealtimeProvider({ children, sessionId, persona = "ibadan" }: { 
 
                 reconnectAttemptRef.current += 1;
                 setReconnectAttempt(reconnectAttemptRef.current);
-                const backoff = Math.min(6000, 400 * Math.max(1, reconnectAttemptRef.current));
+                const backoff = Math.min(10000, 1000 * Math.max(1, reconnectAttemptRef.current));
 
                 if (reconnectTimerRef.current) window.clearTimeout(reconnectTimerRef.current);
                 reconnectTimerRef.current = window.setTimeout(connect, backoff);
@@ -125,7 +137,9 @@ export function RealtimeProvider({ children, sessionId, persona = "ibadan" }: { 
     const send = useCallback((type: string, payload: Record<string, unknown>) => {
         const ws = wsRef.current;
         if (!ws || ws.readyState !== WebSocket.OPEN) {
-            console.warn("[Realtime] Cannot send, socket not open", type);
+            if (!manualCloseRef.current) {
+                console.warn("[Realtime] Cannot send, socket not open", type);
+            }
             return false;
         }
         ws.send(JSON.stringify({ type, payload }));

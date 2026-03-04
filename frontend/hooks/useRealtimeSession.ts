@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { UnifiedWsIncoming } from "../types/api";
+import { firebaseAuth } from "../services/firebase";
 
 function resolveWsBaseUrl(): string {
   // 1. Explicit WS URL setup
@@ -43,12 +44,22 @@ export function useRealtimeSession(sessionId?: string, persona: string = "ibadan
     manualCloseRef.current = false;
     let cancelled = false;
 
-    const connect = () => {
+    const connect = async () => {
       if (cancelled) {
         return;
       }
 
-      const ws = new WebSocket(`${wsBase}/ws/${sessionId}?persona=${persona}`);
+      let token = "";
+      try {
+        if (firebaseAuth?.currentUser) {
+          token = await firebaseAuth.currentUser.getIdToken();
+        }
+      } catch (e) {
+        console.warn("[useRealtimeSession] Failed to get auth token", e);
+      }
+
+      const fullUrl = `${wsBase}/ws/${sessionId}?persona=${persona}${token ? `&token=${token}` : ""}`;
+      const ws = new WebSocket(fullUrl);
       wsRef.current = ws;
 
       ws.onopen = () => {
@@ -80,7 +91,10 @@ export function useRealtimeSession(sessionId?: string, persona: string = "ibadan
         setConnected(false);
       };
 
-      ws.onclose = () => {
+      ws.onclose = (e) => {
+        if (e.code !== 1000) {
+          console.log("[useRealtimeSession] Closed:", e.code, e.reason);
+        }
         setConnected(false);
         if (heartbeatRef.current !== null) {
           window.clearInterval(heartbeatRef.current);
@@ -94,7 +108,7 @@ export function useRealtimeSession(sessionId?: string, persona: string = "ibadan
         reconnectAttemptRef.current += 1;
         const attempt = reconnectAttemptRef.current;
         setReconnectAttempt(attempt);
-        const backoff = Math.min(6000, 400 * Math.max(1, attempt));
+        const backoff = Math.min(10000, 1000 * Math.max(1, attempt));
         if (reconnectTimerRef.current !== null) {
           window.clearTimeout(reconnectTimerRef.current);
         }
@@ -120,11 +134,14 @@ export function useRealtimeSession(sessionId?: string, persona: string = "ibadan
       wsRef.current?.close();
       wsRef.current = null;
     };
-  }, [sessionId]);
+  }, [sessionId, persona]);
 
   const send = useCallback((type: string, payload: Record<string, unknown>) => {
     const ws = wsRef.current;
     if (!ws || ws.readyState !== WebSocket.OPEN) {
+      if (!manualCloseRef.current) {
+        console.warn("[useRealtimeSession] Cannot send, socket not open", type);
+      }
       return false;
     }
     ws.send(JSON.stringify({ type, payload }));

@@ -14,10 +14,20 @@ export default function LoginPage() {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+        if (isLoading) return;
+
+        const trimmedEmail = email.trim();
+        const trimmedPassword = password.trim();
+
+        if (!trimmedEmail || !trimmedPassword) {
+            setError('Please enter both email and password');
+            return;
+        }
+
         setIsLoading(true);
         setError('');
         try {
-            await loginEmail(email, password);
+            await loginEmail(trimmedEmail, trimmedPassword);
             router.push('/dashboard');
         } catch (err: any) {
             setError(err.message || 'Login failed');

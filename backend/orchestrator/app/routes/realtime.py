@@ -125,9 +125,9 @@ async def unified_ws(
 
     async with gemini_live_cm as live_session:
         if live_session:
-            logger.info("Gemini Live session connected successfully.")
+            logger.info(f"Gemini Live session connected successfully for session: {session_id}")
         else:
-            logger.warning("Gemini Live session failed to connect (using null_context).")
+            logger.warning(f"Gemini Live session failed to connect for session: {session_id}. Realtime voice features will be disabled.")
 
         await websocket.send_json(
             {
@@ -223,12 +223,11 @@ async def unified_ws(
                     continue
                 
         except WebSocketDisconnect:
-            pass
+            logger.info(f"WebSocket disconnected normally for session: {session_id}")
         except Exception as exc:
+            logger.error(f"Unexpected error in WebSocket session {session_id}: {exc}", exc_info=True)
             try:
-                import traceback
-                traceback.print_exc()
-                await websocket.send_json({"type": "ERROR", "payload": {"message": str(exc)}})
+                await websocket.send_json({"type": "ERROR", "payload": {"message": "Internal server error in realtime stream"}})
             except:
                 pass
         finally:
