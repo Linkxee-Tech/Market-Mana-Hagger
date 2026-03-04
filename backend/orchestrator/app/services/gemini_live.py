@@ -29,9 +29,7 @@ class GeminiLiveService:
                 model=self.settings.gemini_live_model or "gemini-2.0-flash-exp",
                 config={
                     "system_instruction": persona.system_prompt,
-                    "generation_config": {
-                        "response_modalities": ["AUDIO"]
-                    }
+                    # Removing response_modalities allows the model to optionally return text alongside audio.
                 }
             )
         except Exception as e:

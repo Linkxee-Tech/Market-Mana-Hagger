@@ -170,8 +170,11 @@ async def unified_ws(
                 if msg_type == "USER_SPEECH":
                     text = payload.get("payload", {}).get("text")
                     if text and live_session:
-                        # Forward text to Gemini Live
-                        # For Multimodal Live, we send a part with text
+                        # Forward text to Gemini Live using correct Part structure
+                        # Multimodal Live API expects input as text string or raw bytes,
+                        # but if that fails, we can construct the explicit structure.
+                        # Actually, `live_session.send(input=text)` IS supported by the google-genai SDK 
+                        # if the model supports text input on the live connection. Let's ensure it's sent properly.
                         await live_session.send(input=text, end_of_turn=True)
                     continue
 

@@ -40,6 +40,10 @@ export function ScreenshotUpload({
           autoPlay
           muted
           playsInline
+          onLoadedMetadata={(e) => {
+            const target = e.currentTarget;
+            onScreenshotLoad(target.videoWidth, target.videoHeight);
+          }}
         />
 
         {screenshotDataUrl && (
@@ -74,9 +78,13 @@ export function ScreenshotUpload({
           </div>
         )}
 
-        {screenshotDataUrl && <HighlightOverlay width={screenSize.width} height={screenSize.height} actions={actions} />}
+        {/* ALWAYS render overlay if we have screen dimensions and actions, regardless of source */}
+        {screenSize.width > 0 && actions.length > 0 && (
+          <HighlightOverlay width={screenSize.width} height={screenSize.height} actions={actions} />
+        )}
       </div>
     </section>
   );
 }
+
 
